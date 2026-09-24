@@ -1,0 +1,71 @@
+import asyncio
+import json
+import random
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+import numpy as np
+from sklearn.ensemble import IsolationForest
+
+app = FastAPI(title="CampusIQ API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Train a lightweight Isolation Forest model for water flow anomaly detection
+X_train = np.random.normal(loc=5.0, scale=1.0, size=(100, 1))
+model = IsolationForest(contamination=0.05, random_state=42)
+model.fit(X_train)
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            await connection.send_json(message)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws/telemetry")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            water_flow = round(random.normalvariate(5.0, 1.2), 2)
+            
+            # Inject random anomaly (10% chance)
+            if random.random() < 0.10:
+                water_flow = round(random.uniform(25.0, 45.0), 2)
+
+            is_anomaly = int(model.predict([[water_flow]])[0] == -1)
+
+            payload = {
+                "timestamp": asyncio.get_event_loop().time(),
+                "energy_kwh": round(random.uniform(1100, 1300), 2),
+                "water_flow_lpm": water_flow,
+                "idle_rooms": random.randint(3, 10),
+                "is_anomaly": bool(is_anomaly),
+                "recommendations": [
+                    "Move Class B to Room 204 (30% used)",
+                    "Switch off Block C AC after 4 PM"
+                ] if not is_anomaly else [
+                    "CRITICAL: High water flow detected in Tank T2!",
+                    "Check valve T2 immediately."
+                ]
+            }
+            await manager.broadcast(payload)
+            await asyncio.sleep(2)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
