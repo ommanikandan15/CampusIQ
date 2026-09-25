@@ -1,0 +1,14 @@
+# Core prototype: campusiq/ and its stdlib server run with just this.
+numpy>=1.24
+scipy>=1.10
+
+# Optional: for the tools/train.py notebook-style exploration only.
+pandas>=2.0
+
+# --- Production path (not required to run the prototype) --------------------
+# The bundled campusiq/server.py is a dependency-free http.server so the demo
+# runs anywhere with zero setup. For a real deployment, swap it for:
+#   fastapi>=0.110
+#   uvicorn[standard]>=0.29
+# and port the four routes in campusiq/server.py - the engine (campusiq/engine.py)
+# does not change either way.
